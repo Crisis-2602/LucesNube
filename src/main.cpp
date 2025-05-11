@@ -26,6 +26,7 @@ void fade();
 void sparkle();
 void meteor();
 void breathing();
+void reverseBlinkEffect();  // Nuevo efecto
 void changePattern();
 float thermistorRead();
 
@@ -37,6 +38,7 @@ Task taskFade(30, TASK_FOREVER, &fade);
 Task taskSparkle(50, TASK_FOREVER, &sparkle);
 Task taskMeteor(30, TASK_FOREVER, &meteor);
 Task taskBreathing(20, TASK_FOREVER, &breathing);
+Task taskReverseBlink(100, TASK_FOREVER, &reverseBlinkEffect); // Nueva tarea
 
 void setup() {
   Serial.begin(115200);
@@ -58,6 +60,7 @@ void setup() {
   runner.addTask(taskSparkle);
   runner.addTask(taskMeteor);
   runner.addTask(taskBreathing);
+  runner.addTask(taskReverseBlink); // Agregar nueva tarea
   
   // Activar efectos iniciales
   taskRainbow.enable();
@@ -66,6 +69,31 @@ void setup() {
 
 void loop() {
   runner.execute();
+  
+  // Lectura de comandos seriales
+  if (Serial.available() > 0) {
+    char cmd = Serial.read();
+    if (cmd == 'B' || cmd == 'b') {
+      // Desactivar otros efectos
+      taskRainbow.disable();
+      taskColorWipe.disable();
+      taskFade.disable();
+      taskSparkle.disable();
+      taskMeteor.disable();
+      taskBreathing.disable();
+      taskPattern.disable();
+      // Activar efecto reversa
+      taskReverseBlink.enable();
+      Serial.println("Efecto: Parpadeo en Reversa");
+    } else {
+      // Desactivar efecto de reversa
+      taskReverseBlink.disable();
+      // Reactivar efectos normales
+      taskPattern.enable();
+      taskRainbow.enable();
+      Serial.println("Volviendo a secuencia normal de efectos");
+    }
+  }
   
   // Control de temperatura utilizando el sensor interno del ESP8266
   EVERY_N_SECONDS(10) {
@@ -145,6 +173,24 @@ void breathing() {
   gHue++;
 }
 
+// Efecto de parpadeo en reversa
+void reverseBlinkEffect() {
+  static bool state = false;
+  
+  // Limpiar todos los LEDs
+  FastLED.clear();
+  
+  if (state) {
+    // Encender primeros 15 LEDs en blanco
+    fill_solid(leds, 15, CRGB::White);
+    // Encender últimos 15 LEDs en blanco
+    fill_solid(&leds[NUM_LEDS-15], 15, CRGB::White);
+  }
+  
+  FastLED.show();
+  state = !state;  // Alternar estado
+}
+
 // Cambio automático de patrones
 void changePattern() {
   EVERY_N_SECONDS(10) {
@@ -155,9 +201,10 @@ void changePattern() {
     taskSparkle.disable();
     taskMeteor.disable();
     taskBreathing.disable();
+    taskReverseBlink.disable();
     
     // Cambiar al siguiente patrón
-    patternIndex = (patternIndex + 1) % 6;
+    patternIndex = (patternIndex + 1) % 7; // Ahora son 7 patrones
     
     // Activar el nuevo patrón
     switch(patternIndex) {
@@ -184,6 +231,10 @@ void changePattern() {
       case 5:
         taskBreathing.enable();
         Serial.println("Efecto: Respiración");
+        break;
+      case 6:
+        taskReverseBlink.enable();
+        Serial.println("Efecto: Parpadeo en Reversa");
         break;
     }
   }
