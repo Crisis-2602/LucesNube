@@ -26,7 +26,8 @@ void fade();
 void sparkle();
 void meteor();
 void breathing();
-void reverseBlinkEffect();  // Nuevo efecto
+void reverseBlinkEffect();
+void amberBlinkEffect();  // Nuevo efecto
 void changePattern();
 float thermistorRead();
 
@@ -38,7 +39,8 @@ Task taskFade(30, TASK_FOREVER, &fade);
 Task taskSparkle(50, TASK_FOREVER, &sparkle);
 Task taskMeteor(30, TASK_FOREVER, &meteor);
 Task taskBreathing(20, TASK_FOREVER, &breathing);
-Task taskReverseBlink(100, TASK_FOREVER, &reverseBlinkEffect); // Nueva tarea
+Task taskReverseBlink(100, TASK_FOREVER, &reverseBlinkEffect);
+Task taskAmberBlink(100, TASK_FOREVER, &amberBlinkEffect); // Nueva tarea
 
 void setup() {
   Serial.begin(115200);
@@ -60,7 +62,8 @@ void setup() {
   runner.addTask(taskSparkle);
   runner.addTask(taskMeteor);
   runner.addTask(taskBreathing);
-  runner.addTask(taskReverseBlink); // Agregar nueva tarea
+  runner.addTask(taskReverseBlink);
+  runner.addTask(taskAmberBlink); // Nueva tarea
   
   // Activar efectos iniciales
   taskRainbow.enable();
@@ -82,12 +85,29 @@ void loop() {
       taskMeteor.disable();
       taskBreathing.disable();
       taskPattern.disable();
+      taskAmberBlink.disable();
       // Activar efecto reversa
       taskReverseBlink.enable();
       Serial.println("Efecto: Parpadeo en Reversa");
-    } else {
-      // Desactivar efecto de reversa
+    }
+    else if (cmd == 'I' || cmd == 'i') {
+      // Desactivar otros efectos
+      taskRainbow.disable();
+      taskColorWipe.disable();
+      taskFade.disable();
+      taskSparkle.disable();
+      taskMeteor.disable();
+      taskBreathing.disable();
+      taskPattern.disable();
       taskReverseBlink.disable();
+      // Activar efecto ámbar
+      taskAmberBlink.enable();
+      Serial.println("Efecto: Intermitente Ámbar");
+    }
+    else {
+      // Desactivar efectos especiales
+      taskReverseBlink.disable();
+      taskAmberBlink.disable();
       // Reactivar efectos normales
       taskPattern.enable();
       taskRainbow.enable();
@@ -95,10 +115,10 @@ void loop() {
     }
   }
   
-  // Control de temperatura utilizando el sensor interno del ESP8266
+  // Control de temperatura
   EVERY_N_SECONDS(10) {
     #ifdef ESP8266
-      float temp = (thermistorRead() - 20.0) * 0.98; // Aproximación de temperatura
+      float temp = (thermistorRead() - 20.0) * 0.98;
       if (temp > 45.0) {
         FastLED.setBrightness(BRIGHTNESS / 2);
       } else {
@@ -191,6 +211,26 @@ void reverseBlinkEffect() {
   state = !state;  // Alternar estado
 }
 
+// Efecto de parpadeo en ámbar
+void amberBlinkEffect() {
+  static bool state = false;
+  
+  // Limpiar todos los LEDs
+  FastLED.clear();
+  
+  if (state) {
+    // Color ámbar (mezcla de rojo y verde)
+    CRGB amberColor = CRGB(255, 191, 0);
+    // Encender primeros 15 LEDs
+    fill_solid(leds, 15, amberColor);
+    // Encender últimos 15 LEDs
+    fill_solid(&leds[NUM_LEDS-15], 15, amberColor);
+  }
+  
+  FastLED.show();
+  state = !state;  // Alternar estado
+}
+
 // Cambio automático de patrones
 void changePattern() {
   EVERY_N_SECONDS(10) {
@@ -202,9 +242,10 @@ void changePattern() {
     taskMeteor.disable();
     taskBreathing.disable();
     taskReverseBlink.disable();
+    taskAmberBlink.disable();
     
     // Cambiar al siguiente patrón
-    patternIndex = (patternIndex + 1) % 7; // Ahora son 7 patrones
+    patternIndex = (patternIndex + 1) % 8; // Ahora son 8 patrones
     
     // Activar el nuevo patrón
     switch(patternIndex) {
@@ -235,6 +276,10 @@ void changePattern() {
       case 6:
         taskReverseBlink.enable();
         Serial.println("Efecto: Parpadeo en Reversa");
+        break;
+      case 7:
+        taskAmberBlink.enable();
+        Serial.println("Efecto: Parpadeo Ámbar");
         break;
     }
   }
