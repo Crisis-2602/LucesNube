@@ -1,0 +1,15 @@
+{
+    "name": "ESP8266 Development",
+    "image": "mcr.microsoft.com/devcontainers/base:debian",
+    "features": {
+        "ghcr.io/devcontainers/features/docker-in-docker:1": {}
+    },
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "platformio.platformio-ide"
+            ]
+        }
+    },
+    "postCreateCommand": "pip3 install platformio && pio platform install esp8266 && pio lib install \"Adafruit Unified Sensor\" && pio lib install \"DHT sensor library\""
+}
