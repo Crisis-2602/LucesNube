@@ -6,7 +6,7 @@
 #define LED_PIN     D4        
 #define NUM_LEDS    60       
 #define BRIGHTNESS  50       
-#define LED_TYPE    WS2812B   
+#define LED_TYPE    WS2812B   //Tipo de Tira de LED
 #define COLOR_ORDER GRB       
 #define MAX_POWER   500      // Límite de corriente en mA
 
