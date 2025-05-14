@@ -2,7 +2,7 @@
 #include <FastLED.h>
 #include <TaskScheduler.h>
 
-// Configuramos la parte fisica de la tira led
+// Configuración de la tira LED
 #define LED_PIN     D4        
 #define NUM_LEDS    60       
 #define BRIGHTNESS  50       
