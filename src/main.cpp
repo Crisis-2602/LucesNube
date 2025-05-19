@@ -6,9 +6,9 @@
 #define LED_PIN     D4        
 #define NUM_LEDS    60       
 #define BRIGHTNESS  50       
-#define LED_TYPE    WS2812B   //Tipo de Tira de LED
+#define LED_TYPE    WS2812B   // Tipo de Tira de LED
 #define COLOR_ORDER GRB       
-#define MAX_POWER   500      // Límite de corriente en mA
+#define MAX_POWER   500       // Límite de corriente en mA
 
 // Variables globales
 CRGB leds[NUM_LEDS];
@@ -19,6 +19,19 @@ uint8_t gHue = 0;
 uint8_t patternIndex = 0;
 uint8_t colorIndex = 0;
 
+// Variables para controlar efectos direccionales
+int leftPosition = NUM_LEDS - 1;
+int rightPosition = 0;
+
+// Control de comandos y estado
+char lastCommand = ' ';
+bool inNormalMode = true;
+bool inReverseMode = false;
+bool inBlinkMode = false;
+bool inLeftMode = false;
+bool inRightMode = false;
+bool inStopMode = false;
+
 // Declaración de funciones de efectos
 void rainbowWave();
 void colorWipe();
@@ -27,9 +40,21 @@ void sparkle();
 void meteor();
 void breathing();
 void reverseBlinkEffect();
-void amberBlinkEffect();  // Nuevo efecto
+void amberBlinkEffect();
+void directionLeftEffect();
+void directionRightEffect();
+void stopEffect();
 void changePattern();
 float thermistorRead();
+void disableAllEffects();
+
+// Declaración de funciones de cambio de modo
+void switchToNormalMode();
+void switchToReverseMode();
+void switchToBlinkMode();
+void switchToLeftMode();
+void switchToRightMode();
+void switchToStopMode();
 
 // Configuración de tareas
 Task taskPattern(50, TASK_FOREVER, &changePattern);
@@ -40,7 +65,10 @@ Task taskSparkle(50, TASK_FOREVER, &sparkle);
 Task taskMeteor(30, TASK_FOREVER, &meteor);
 Task taskBreathing(20, TASK_FOREVER, &breathing);
 Task taskReverseBlink(100, TASK_FOREVER, &reverseBlinkEffect);
-Task taskAmberBlink(100, TASK_FOREVER, &amberBlinkEffect); // Nueva tarea
+Task taskAmberBlink(100, TASK_FOREVER, &amberBlinkEffect);
+Task taskDirectionLeft(100, TASK_FOREVER, &directionLeftEffect);
+Task taskDirectionRight(100, TASK_FOREVER, &directionRightEffect);
+Task taskStop(1000, TASK_FOREVER, &stopEffect);
 
 void setup() {
   Serial.begin(115200);
@@ -63,11 +91,23 @@ void setup() {
   runner.addTask(taskMeteor);
   runner.addTask(taskBreathing);
   runner.addTask(taskReverseBlink);
-  runner.addTask(taskAmberBlink); // Nueva tarea
+  runner.addTask(taskAmberBlink);
+  runner.addTask(taskDirectionLeft);
+  runner.addTask(taskDirectionRight);
+  runner.addTask(taskStop);
   
   // Activar efectos iniciales
   taskRainbow.enable();
   taskPattern.enable();
+  
+  // Mostrar instrucciones en el monitor serial
+  Serial.println("Sistema inicializado - Comandos disponibles:");
+  Serial.println("- 'B': Reversa (Parpadean los primeros y últimos 15 LEDs en blanco)");
+  Serial.println("- 'I': Intermitentes (Parpadean los primeros y últimos 15 LEDs en ámbar)");
+  Serial.println("- 'L': Izquierda (Animación direccional izquierda usando dos LEDs)");
+  Serial.println("- 'R': Derecha (Animación direccional derecha usando dos LEDs)");
+  Serial.println("- 'S': Alto (Enciende los primeros y últimos 15 LEDs en rojo)");
+  Serial.println("Enviar el mismo comando para desactivar y volver a modo RGB");
 }
 
 void loop() {
@@ -76,42 +116,36 @@ void loop() {
   // Lectura de comandos seriales
   if (Serial.available() > 0) {
     char cmd = Serial.read();
-    if (cmd == 'B' || cmd == 'b') {
-      // Desactivar otros efectos
-      taskRainbow.disable();
-      taskColorWipe.disable();
-      taskFade.disable();
-      taskSparkle.disable();
-      taskMeteor.disable();
-      taskBreathing.disable();
-      taskPattern.disable();
-      taskAmberBlink.disable();
-      // Activar efecto reversa
-      taskReverseBlink.enable();
-      Serial.println("Efecto: Parpadeo en Reversa");
-    }
-    else if (cmd == 'I' || cmd == 'i') {
-      // Desactivar otros efectos
-      taskRainbow.disable();
-      taskColorWipe.disable();
-      taskFade.disable();
-      taskSparkle.disable();
-      taskMeteor.disable();
-      taskBreathing.disable();
-      taskPattern.disable();
-      taskReverseBlink.disable();
-      // Activar efecto ámbar
-      taskAmberBlink.enable();
-      Serial.println("Efecto: Intermitente Ámbar");
-    }
-    else {
-      // Desactivar efectos especiales
-      taskReverseBlink.disable();
-      taskAmberBlink.disable();
-      // Reactivar efectos normales
-      taskPattern.enable();
-      taskRainbow.enable();
-      Serial.println("Volviendo a secuencia normal de efectos");
+    
+    // Sistema de toggle (activar/desactivar con el mismo comando)
+    if (cmd == lastCommand && cmd != ' ') {
+      // Si el mismo comando se recibe dos veces, vuelve al modo normal
+      switchToNormalMode();
+      lastCommand = ' ';
+    } else {
+      // Procesar nuevo comando
+      switch (cmd) {
+        case 'B': case 'b':
+          switchToReverseMode();
+          lastCommand = 'B';
+          break;
+        case 'I': case 'i':
+          switchToBlinkMode();
+          lastCommand = 'I';
+          break;
+        case 'L': case 'l':
+          switchToLeftMode();
+          lastCommand = 'L';
+          break;
+        case 'R': case 'r':
+          switchToRightMode();
+          lastCommand = 'R';
+          break;
+        case 'S': case 's':
+          switchToStopMode();
+          lastCommand = 'S';
+          break;
+      }
     }
   }
   
@@ -121,6 +155,9 @@ void loop() {
       float temp = (thermistorRead() - 20.0) * 0.98;
       if (temp > 45.0) {
         FastLED.setBrightness(BRIGHTNESS / 2);
+        Serial.print("Temperatura alta (");
+        Serial.print(temp);
+        Serial.println("°C) - Reduciendo brillo");
       } else {
         FastLED.setBrightness(BRIGHTNESS);
       }
@@ -135,6 +172,90 @@ float thermistorRead() {
   // Conversión aproximada a temperatura
   return (volt - 0.5) * 100;
 }
+
+// Función para deshabilitar todos los efectos
+void disableAllEffects() {
+  taskRainbow.disable();
+  taskColorWipe.disable();
+  taskFade.disable();
+  taskSparkle.disable();
+  taskMeteor.disable();
+  taskBreathing.disable();
+  taskReverseBlink.disable();
+  taskAmberBlink.disable();
+  taskDirectionLeft.disable();
+  taskDirectionRight.disable();
+  taskStop.disable();
+  taskPattern.disable();
+  
+  // Limpiar todos los LEDs
+  FastLED.clear();
+}
+
+// === FUNCIONES DE CAMBIO DE MODO ===
+
+void switchToNormalMode() {
+  disableAllEffects();
+  inNormalMode = true;
+  inReverseMode = false;
+  inBlinkMode = false;
+  inLeftMode = false;
+  inRightMode = false;
+  inStopMode = false;
+  
+  taskPattern.enable();
+  taskRainbow.enable();
+  Serial.println("Volviendo a secuencia normal de efectos");
+}
+
+void switchToReverseMode() {
+  disableAllEffects();
+  inNormalMode = false;
+  inReverseMode = true;
+  
+  taskReverseBlink.enable();
+  Serial.println("Efecto: Parpadeo en Reversa");
+}
+
+void switchToBlinkMode() {
+  disableAllEffects();
+  inNormalMode = false;
+  inBlinkMode = true;
+  
+  taskAmberBlink.enable();
+  Serial.println("Efecto: Intermitente Ámbar");
+}
+
+void switchToLeftMode() {
+  disableAllEffects();
+  inNormalMode = false;
+  inLeftMode = true;
+  leftPosition = NUM_LEDS - 1;
+  
+  taskDirectionLeft.enable();
+  Serial.println("Efecto: Dirección Izquierda");
+}
+
+void switchToRightMode() {
+  disableAllEffects();
+  inNormalMode = false;
+  inRightMode = true;
+  rightPosition = 0;
+  
+  taskDirectionRight.enable();
+  Serial.println("Efecto: Dirección Derecha");
+}
+
+void switchToStopMode() {
+  disableAllEffects();
+  inNormalMode = false;
+  inStopMode = true;
+  
+  taskStop.enable();
+  Serial.println("Efecto: Alto (Rojo)");
+}
+
+// === FUNCIONES DE EFECTOS ===
 
 // Efecto de ola arcoíris
 void rainbowWave() {
@@ -231,9 +352,75 @@ void amberBlinkEffect() {
   state = !state;  // Alternar estado
 }
 
+// Efecto dirección izquierda
+void directionLeftEffect() {
+  // Limpiar todos los LEDs
+  FastLED.clear();
+  
+  // Primer LED en verde, segundo en rojo
+  leds[leftPosition] = CRGB::Green;
+  if (leftPosition < NUM_LEDS - 1) {
+    leds[leftPosition + 1] = CRGB::Red;
+  }
+  
+  // Mostrar y avanzar posición
+  FastLED.show();
+  leftPosition--;
+  
+  // Reiniciar cuando llegue al inicio
+  if (leftPosition < 0) {
+    leftPosition = NUM_LEDS - 1;
+  }
+}
+
+// Efecto dirección derecha
+void directionRightEffect() {
+  // Limpiar todos los LEDs
+  FastLED.clear();
+  
+  // Primer LED en verde, segundo en rojo
+  leds[rightPosition] = CRGB::Green;
+  if (rightPosition > 0) {
+    leds[rightPosition - 1] = CRGB::Red;
+  }
+  
+  // Mostrar y avanzar posición
+  FastLED.show();
+  rightPosition++;
+  
+  // Reiniciar cuando llegue al final
+  if (rightPosition >= NUM_LEDS) {
+    rightPosition = 0;
+  }
+}
+
+// Efecto alto (rojo fijo)
+void stopEffect() {
+  static bool state = false;
+  
+  // Limpiar todos los LEDs
+  FastLED.clear();
+  
+  // Color rojo brillante
+  CRGB redColor = CRGB::Red;
+  
+  // Encender los LEDs en rojo (siempre encendidos o parpadeando)
+  if (state || true) {  // Para que siempre esté encendido, usa "true"
+    // Encender primeros 15 LEDs
+    fill_solid(leds, 15, redColor);
+    // Encender últimos 15 LEDs
+    fill_solid(&leds[NUM_LEDS-15], 15, redColor);
+  }
+  
+  FastLED.show();
+  state = !state;  // Alternar estado (para parpadeo si se desea)
+}
+
 // Cambio automático de patrones
 void changePattern() {
   EVERY_N_SECONDS(10) {
+    if (!inNormalMode) return;  // No cambiar si estamos en un modo especial
+    
     // Desactivar todos los efectos
     taskRainbow.disable();
     taskColorWipe.disable();
@@ -243,9 +430,12 @@ void changePattern() {
     taskBreathing.disable();
     taskReverseBlink.disable();
     taskAmberBlink.disable();
+    taskDirectionLeft.disable();
+    taskDirectionRight.disable();
+    taskStop.disable();
     
     // Cambiar al siguiente patrón
-    patternIndex = (patternIndex + 1) % 8; // Ahora son 8 patrones
+    patternIndex = (patternIndex + 1) % 6;  // Solo 6 para el modo normal
     
     // Activar el nuevo patrón
     switch(patternIndex) {
@@ -272,14 +462,6 @@ void changePattern() {
       case 5:
         taskBreathing.enable();
         Serial.println("Efecto: Respiración");
-        break;
-      case 6:
-        taskReverseBlink.enable();
-        Serial.println("Efecto: Parpadeo en Reversa");
-        break;
-      case 7:
-        taskAmberBlink.enable();
-        Serial.println("Efecto: Parpadeo Ámbar");
         break;
     }
   }
