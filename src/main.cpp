@@ -3,12 +3,12 @@
 #include <TaskScheduler.h>
 
 // Configuración de la tira LED
-#define LED_PIN     D4        
+#define LED_PIN     D5        // Correcto para ESP8266
 #define NUM_LEDS    60       
 #define BRIGHTNESS  50       
-#define LED_TYPE    WS2812B   // Tipo de Tira de LED
+#define LED_TYPE    WS2812B   
 #define COLOR_ORDER GRB       
-#define MAX_POWER   500       // Límite de corriente en mA
+#define MAX_POWER   500
 
 // Variables globales
 CRGB leds[NUM_LEDS];
